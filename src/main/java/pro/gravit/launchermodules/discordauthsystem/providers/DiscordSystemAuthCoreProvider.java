@@ -1,5 +1,10 @@
 package pro.gravit.launchermodules.discordauthsystem.providers;
 
+import io.netty.buffer.Unpooled;
+import pro.gravit.launcher.Launcher;
+import pro.gravit.launcher.events.request.GetAvailabilityAuthRequestEvent;
+import pro.gravit.launcher.request.auth.details.AuthPasswordDetails;
+import pro.gravit.launcher.request.auth.details.AuthWebViewDetails;
 import pro.gravit.launchserver.auth.core.AuthCoreProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -15,16 +20,19 @@ import pro.gravit.launchserver.auth.core.UserSession;
 import pro.gravit.launchserver.auth.core.interfaces.provider.AuthSupportExit;
 import pro.gravit.launchserver.auth.core.interfaces.provider.AuthSupportRegistration;
 import pro.gravit.launchserver.manangers.AuthManager;
+import pro.gravit.launchserver.socket.Client;
 import pro.gravit.launchserver.socket.response.auth.AuthResponse;
+import pro.gravit.utils.helper.IOHelper;
 import pro.gravit.utils.helper.SecurityHelper;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements AuthSupportRegistration, AuthSupportExit {
     private final transient Logger logger = LogManager.getLogger();
-    private transient DiscordAuthSystemConfig module;
+    private transient DiscordAuthSystemModule module;
 
     @Override
     public User getUserByUsername(String username) {
@@ -63,7 +71,17 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public AuthManager.AuthReport createOAuthSession(User user, AuthResponse.AuthContext context, PasswordVerifyReport report, boolean minecraftAccess) throws IOException {
-        return null;
+        if (minecraftAccess) {
+            String minecraftAccessToken = SecurityHelper.randomStringToken();
+            updateAuth(user, minecraftAccessToken);
+            return AuthManager.AuthReport.ofMinecraftAccessToken(minecraftAccessToken);
+        } else {
+            return AuthManager.AuthReport.ofMinecraftAccessToken(null);
+        }
+    }
+
+    public void updateAuth(User user, String minecraftAccessToken) {
+
     }
 
     @Override
@@ -83,11 +101,23 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public boolean deleteSession(UserSession session) {
-        return null;
+        return true;
     }
 
     @Override
     public boolean exitUser(User user) {
-        return null;
+        return false;
+    }
+
+    @Override
+    public List<GetAvailabilityAuthRequestEvent.AuthAvailabilityDetails> getDetails(Client client) {
+        String state = UUID.randomUUID().toString();
+        client.setProperty("state", state);
+        DiscordAuthSystemConfig config = module.jsonConfigurable.getConfig();
+        String authorizeUrl = "https://discord.com/oauth2/authorize";
+        String responseType = "code";
+        String[] scope = new String[]{ "identify", "guilds.join", "email" };
+        String url = String.format("%s?response_type=%s&client_id=%s&scope=%s&state=%s&redirect_uri=%s&prompt=consent", authorizeUrl, responseType, config.clientId, String.join("%20", scope), state, config.redirectUrl);
+        return List.of(new AuthWebViewDetails(url, "https://google.com", true, true));
     }
 }

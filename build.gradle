@@ -1,7 +1,7 @@
-def mainClassName = "pro.gravit.launchermodules.fileauthsystem.FileAuthSystemModule"
+def mainClassName = "pro.gravit.launchermodules.discordauthsystem.DiscordAuthSystemModule"
 
-sourceCompatibility = 11
-targetCompatibility = 11
+sourceCompatibility = '11'
+targetCompatibility = '11'
 
 jar {
     manifest.attributes("Module-Main-Class": mainClassName)
