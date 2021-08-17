@@ -36,12 +36,17 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public User getUserByUsername(String username) {
-        return module.getUser(username);
+        return module.getUserByUsername(username);
+    }
+
+    @Override
+    public User getUserByLogin(String login) {
+        return module.getUserByLogin(login);
     }
 
     @Override
     public User getUserByUUID(UUID uuid) {
-        return module.getUser(uuid);
+        return module.getUserByUUID(uuid);
     }
 
     @Override
@@ -113,11 +118,10 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
     public List<GetAvailabilityAuthRequestEvent.AuthAvailabilityDetails> getDetails(Client client) {
         String state = UUID.randomUUID().toString();
         client.setProperty("state", state);
-        DiscordAuthSystemConfig config = module.jsonConfigurable.getConfig();
         String authorizeUrl = "https://discord.com/oauth2/authorize";
         String responseType = "code";
         String[] scope = new String[]{ "identify", "guilds.join", "email" };
-        String url = String.format("%s?response_type=%s&client_id=%s&scope=%s&state=%s&redirect_uri=%s&prompt=consent", authorizeUrl, responseType, config.clientId, String.join("%20", scope), state, config.redirectUrl);
+        String url = String.format("%s?response_type=%s&client_id=%s&scope=%s&state=%s&redirect_uri=%s&prompt=consent", authorizeUrl, responseType, module.config.clientId, String.join("%20", scope), state, module.config.redirectUrl);
         return List.of(new AuthWebViewDetails(url, "https://google.com", true, true));
     }
 }
