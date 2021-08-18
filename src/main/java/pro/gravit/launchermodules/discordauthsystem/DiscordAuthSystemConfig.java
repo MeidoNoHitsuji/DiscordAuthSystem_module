@@ -8,4 +8,5 @@ public class DiscordAuthSystemConfig {
     public String redirectUrl = "redirectUrl";
     public String backendUserUrl = "backendUserUrl";
     public Map<String, String> addParameters = new HashMap<>();
+    public long oauthTokenExpire = 60 * 60 * 1000;
 }

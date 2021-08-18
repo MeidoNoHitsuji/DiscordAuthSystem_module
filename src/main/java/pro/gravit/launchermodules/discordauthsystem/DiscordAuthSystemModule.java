@@ -3,32 +3,48 @@ package pro.gravit.launchermodules.discordauthsystem;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 import pro.gravit.launcher.ClientPermissions;
 import pro.gravit.launcher.HTTPRequest;
+import pro.gravit.launcher.Launcher;
 import pro.gravit.launcher.config.JsonConfigurable;
 import pro.gravit.launcher.modules.LauncherInitContext;
 import pro.gravit.launcher.modules.LauncherModule;
 import pro.gravit.launcher.modules.LauncherModuleInfo;
+import pro.gravit.launcher.modules.events.ClosePhase;
 import pro.gravit.launcher.modules.events.PreConfigPhase;
 import pro.gravit.launchermodules.discordauthsystem.providers.DiscordSystemAuthCoreProvider;
 import pro.gravit.launchserver.LaunchServer;
 import pro.gravit.launchserver.auth.core.AuthCoreProvider;
 import pro.gravit.launchserver.auth.core.User;
+import pro.gravit.launchserver.auth.core.UserSession;
 import pro.gravit.launchserver.modules.events.LaunchServerFullInitEvent;
 import pro.gravit.launchserver.socket.handlers.NettyWebAPIHandler;
 import pro.gravit.utils.Version;
+import pro.gravit.utils.helper.IOHelper;
 import pro.gravit.utils.helper.LogHelper;
+import pro.gravit.utils.helper.SecurityHelper;
 
 import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.lang.reflect.Type;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DiscordAuthSystemModule extends LauncherModule {
     public static final Version version = new Version(1, 0, 0, 0, Version.Type.LTS);
     private static final Gson gson = new Gson();
     public JsonConfigurable<DiscordAuthSystemConfig> jsonConfigurable;
+    public Set<UserSessionEntity> sessions = ConcurrentHashMap.newKeySet();
     public DiscordAuthSystemConfig config;
+    private Path dbPath;
 
     public DiscordAuthSystemModule() {
         super(new LauncherModuleInfo("DiscordAuthSystem", version, new String[]{"LaunchServerCore"}));
@@ -38,7 +54,9 @@ public class DiscordAuthSystemModule extends LauncherModule {
     public void init(LauncherInitContext initContext) {
         registerEvent(this::finish, LaunchServerFullInitEvent.class);
         registerEvent(this::preConfig, PreConfigPhase.class);
+        registerEvent(this::exit, ClosePhase.class);
         jsonConfigurable = modulesConfigManager.getConfigurable(DiscordAuthSystemConfig.class, moduleInfo.name);
+        dbPath = modulesConfigManager.getModuleConfigDir(moduleInfo.name);
     }
 
     public void finish(LaunchServerFullInitEvent event) {
@@ -49,7 +67,53 @@ public class DiscordAuthSystemModule extends LauncherModule {
         } catch (IOException e) {
             LogHelper.error(e);
         }
+        load();
         NettyWebAPIHandler.addNewSeverlet("auth/discord", new DiscordAuthWebApi(this, launchServer));
+    }
+
+    public void exit(ClosePhase closePhase) {
+        if (jsonConfigurable != null && jsonConfigurable.getConfig() != null)
+            save();
+    }
+
+    public void load() {
+        load(dbPath);
+    }
+
+    public void load(Path path) {
+        {
+            Path sessionsPath = path.resolve("Sessions.json");
+            if (!Files.exists(sessionsPath)) return;
+            Type sessionsType = new TypeToken<Set<UserSessionEntity>>() {
+            }.getType();
+            try (Reader reader = IOHelper.newReader(sessionsPath)) {
+                this.sessions = Launcher.gsonManager.configGson.fromJson(reader, sessionsType);
+            } catch (IOException e) {
+                LogHelper.error(e);
+            }
+            for (UserSessionEntity sessionEntity : sessions) {
+                if (sessionEntity.userEntityUUID != null) {
+                    sessionEntity.entity = getUserByUUID(sessionEntity.userEntityUUID);
+                }
+            }
+        }
+    }
+
+    public void save() {
+        save(dbPath);
+    }
+
+    public void save(Path path) {
+        {
+            Path sessionsPath = path.resolve("Sessions.json");
+            Type sessionsType = new TypeToken<Set<UserSessionEntity>>() {
+            }.getType();
+            try (Writer writer = IOHelper.newWriter(sessionsPath)) {
+                Launcher.gsonManager.configGson.toJson(sessions, sessionsType, writer);
+            } catch (IOException e) {
+                LogHelper.error(e);
+            }
+        }
     }
 
     public void preConfig(PreConfigPhase preConfigPhase) {
@@ -76,6 +140,26 @@ public class DiscordAuthSystemModule extends LauncherModule {
         } else {
             return null;
         }
+    }
+
+    public UserSessionEntity getSessionByAccessToken(String accessToken) {
+        return sessions.stream().filter(e -> e.accessToken != null && e.accessToken.equals(accessToken)).findFirst().orElse(null);
+    }
+
+    public UserSessionEntity getSessionByRefreshToken(String refreshToken) {
+        return sessions.stream().filter(e -> e.accessToken != null && e.refreshToken.equals(refreshToken)).findFirst().orElse(null);
+    }
+
+    public void addNewSession(UserSessionEntity session) {
+        sessions.add(session);
+    }
+
+    public boolean deleteSession(UserSessionEntity entity) {
+        return sessions.remove(entity);
+    }
+
+    public boolean exitUser(DiscordUser user) {
+        return sessions.removeIf(e -> e.entity == user);
     }
 
     public DiscordUser getUserByLogin(String login) {
@@ -144,6 +228,56 @@ public class DiscordAuthSystemModule extends LauncherModule {
         @Override
         public boolean isBanned() {
             return false;
+        }
+    }
+
+    public static class UserSessionEntity implements UserSession {
+        private final UUID uuid;
+        public transient DiscordUser entity;
+        public UUID userEntityUUID;
+        public String accessToken;
+        public String refreshToken;
+        public long expireMillis;
+
+        public UserSessionEntity(DiscordUser entity) {
+            this.uuid = UUID.randomUUID();
+            this.entity = entity;
+            this.accessToken = SecurityHelper.randomStringToken();
+            this.refreshToken = SecurityHelper.randomStringToken();
+            this.expireMillis = 0;
+            this.userEntityUUID = entity.uuid;
+        }
+
+        public void update(long expireMillis) {
+            this.expireMillis = System.currentTimeMillis() + expireMillis;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            UserSessionEntity entity = (UserSessionEntity) o;
+            return Objects.equals(uuid, entity.uuid);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(uuid);
+        }
+
+        @Override
+        public String getID() {
+            return uuid.toString();
+        }
+
+        @Override
+        public User getUser() {
+            return entity;
+        }
+
+        @Override
+        public long getExpireIn() {
+            return expireMillis;
         }
     }
 }

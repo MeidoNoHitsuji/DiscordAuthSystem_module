@@ -56,12 +56,24 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public UserSession getUserSessionByOAuthAccessToken(String accessToken) throws OAuthAccessTokenExpired {
-        return null;
+        DiscordAuthSystemModule.UserSessionEntity session = module.getSessionByAccessToken(accessToken);
+        if (session == null) return null;
+        if (session.expireMillis != 0 && session.expireMillis < System.currentTimeMillis())
+            throw new OAuthAccessTokenExpired();
+        return session;
     }
 
     @Override
     public AuthManager.AuthReport refreshAccessToken(String refreshToken, AuthResponse.AuthContext context) {
-        return null;
+        DiscordAuthSystemConfig config = module.jsonConfigurable.getConfig();
+        DiscordAuthSystemModule.UserSessionEntity session = module.getSessionByRefreshToken(refreshToken);
+        if (session == null) return null;
+        session.refreshToken = SecurityHelper.randomStringToken();
+        session.accessToken = SecurityHelper.randomStringToken();
+        if (config.oauthTokenExpire != 0) {
+            session.update(config.oauthTokenExpire);
+        }
+        return AuthManager.AuthReport.ofOAuth(session.accessToken, session.refreshToken, config.oauthTokenExpire);
     }
 
     @Override
@@ -71,27 +83,31 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public PasswordVerifyReport verifyPassword(User user, AuthRequest.AuthPasswordInterface password) {
-        return PasswordVerifyReport.OK;
+        return PasswordVerifyReport.FAILED;
     }
 
     @Override
     public AuthManager.AuthReport createOAuthSession(User user, AuthResponse.AuthContext context, PasswordVerifyReport report, boolean minecraftAccess) throws IOException {
+        DiscordAuthSystemConfig config = module.jsonConfigurable.getConfig();
+        DiscordAuthSystemModule.UserSessionEntity entity = new DiscordAuthSystemModule.UserSessionEntity((DiscordAuthSystemModule.DiscordUser) user);
+        module.addNewSession(entity);
+        if (config.oauthTokenExpire != 0) {
+            entity.update(config.oauthTokenExpire);
+        }
         if (minecraftAccess) {
             String minecraftAccessToken = SecurityHelper.randomStringToken();
-            updateAuth(user, minecraftAccessToken);
-            return AuthManager.AuthReport.ofMinecraftAccessToken(minecraftAccessToken);
-        } else {
-            return AuthManager.AuthReport.ofMinecraftAccessToken(null);
+            ((DiscordAuthSystemModule.DiscordUser) user).accessToken = minecraftAccessToken;
+            return AuthManager.AuthReport.ofOAuthWithMinecraft(minecraftAccessToken, entity.accessToken, entity.refreshToken, config.oauthTokenExpire);
         }
-    }
-
-    public void updateAuth(User user, String minecraftAccessToken) {
-
+        return AuthManager.AuthReport.ofOAuth(entity.accessToken, entity.refreshToken, config.oauthTokenExpire);
     }
 
     @Override
     protected boolean updateServerID(User user, String serverID) throws IOException {
-        return false;
+        DiscordAuthSystemModule.DiscordUser entity = (DiscordAuthSystemModule.DiscordUser) user;
+        if (entity == null) return false;
+        entity.serverId = serverID;
+        return true;
     }
 
     @Override
@@ -106,12 +122,12 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public boolean deleteSession(UserSession session) {
-        return true;
+        return module.deleteSession((DiscordAuthSystemModule.UserSessionEntity) session);
     }
 
     @Override
     public boolean exitUser(User user) {
-        return false;
+        return module.exitUser((DiscordAuthSystemModule.DiscordUser) user);
     }
 
     @Override
