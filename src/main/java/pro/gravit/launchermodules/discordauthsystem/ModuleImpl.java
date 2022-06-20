@@ -1,65 +1,48 @@
 package pro.gravit.launchermodules.discordauthsystem;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.reflect.TypeToken;
-import pro.gravit.launcher.ClientPermissions;
-import pro.gravit.launcher.HTTPRequest;
-import pro.gravit.launcher.Launcher;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import pro.gravit.launcher.config.JsonConfigurable;
 import pro.gravit.launcher.modules.LauncherInitContext;
 import pro.gravit.launcher.modules.LauncherModule;
 import pro.gravit.launcher.modules.LauncherModuleInfo;
-import pro.gravit.launcher.modules.events.ClosePhase;
 import pro.gravit.launcher.modules.events.PreConfigPhase;
+import pro.gravit.launchermodules.discordauthsystem.providers.DiscordApi;
 import pro.gravit.launchermodules.discordauthsystem.providers.DiscordSystemAuthCoreProvider;
 import pro.gravit.launchserver.LaunchServer;
-import pro.gravit.launchserver.auth.MySQLSourceConfig;
 import pro.gravit.launchserver.auth.core.AuthCoreProvider;
-import pro.gravit.launchserver.auth.core.User;
-import pro.gravit.launchserver.auth.core.UserSession;
 import pro.gravit.launchserver.modules.events.LaunchServerFullInitEvent;
+import pro.gravit.launchserver.modules.impl.LaunchServerInitContext;
 import pro.gravit.launchserver.socket.handlers.NettyWebAPIHandler;
 import pro.gravit.utils.Version;
-import pro.gravit.utils.helper.IOHelper;
 import pro.gravit.utils.helper.LogHelper;
-import pro.gravit.utils.helper.SecurityHelper;
 
 import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
-import java.lang.reflect.Type;
-import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class ModuleImpl extends LauncherModule {
     public static final Version version = new Version(1, 0, 0, 0, Version.Type.LTS);
-    private static final Gson gson = new Gson();
+    private static boolean registred = false;
+    private final transient Logger logger = LogManager.getLogger();
     public JsonConfigurable<Config> jsonConfigurable;
-
-//    public Map<UUID, DiscordSystemAuthCoreProvider.DiscordUser> users = new ConcurrentHashMap<>();
-//    public Set<DiscordSystemAuthCoreProvider.DiscordUserSession> sessions = ConcurrentHashMap.newKeySet();
     public Config config;
-//    private Path dbPath;
 
     public ModuleImpl() {
         super(new LauncherModuleInfo("DiscordAuthSystem", version, new String[]{"LaunchServerCore"}));
     }
 
+    public void preConfig(PreConfigPhase preConfigPhase) {
+        if (!registred) {
+            AuthCoreProvider.providers.register("discordauthsystem", DiscordSystemAuthCoreProvider.class);
+            registred = true;
+        }
+    }
+
     @Override
     public void init(LauncherInitContext initContext) {
+        registerEvent(this::preConfig, PreConfigPhase.class);
         registerEvent(this::finish, LaunchServerFullInitEvent.class);
-//        registerEvent(this::preConfig, PreConfigPhase.class);
-//        registerEvent(this::exit, ClosePhase.class);
         jsonConfigurable = modulesConfigManager.getConfigurable(Config.class, moduleInfo.name);
-//        dbPath = modulesConfigManager.getModuleConfigDir(moduleInfo.name);
     }
 
     public void finish(LaunchServerFullInitEvent event) {
@@ -70,7 +53,7 @@ public class ModuleImpl extends LauncherModule {
         } catch (IOException e) {
             LogHelper.error(e);
         }
-//        load();
+        DiscordApi.initialize(config);
         NettyWebAPIHandler.addNewSeverlet("auth/discord", new WebApi(this, launchServer));
     }
 

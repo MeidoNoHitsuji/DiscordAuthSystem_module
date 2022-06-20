@@ -9,6 +9,8 @@ import pro.gravit.launcher.ClientPermissions;
 import pro.gravit.launcher.events.RequestEvent;
 import pro.gravit.launcher.events.request.AuthRequestEvent;
 import pro.gravit.launcher.profiles.PlayerProfile;
+import pro.gravit.launchermodules.discordauthsystem.providers.DiscordApi;
+import pro.gravit.launchermodules.discordauthsystem.providers.DiscordSystemAuthCoreProvider;
 import pro.gravit.launchserver.LaunchServer;
 import pro.gravit.launchserver.auth.AuthProviderPair;
 import pro.gravit.launchserver.auth.core.User;
@@ -40,32 +42,38 @@ public class WebApi implements NettyWebAPIHandler.SimpleSeverletHandler {
         String state = params.get("state");
 
         if (state == null || state.isEmpty()) {
-            sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.NOT_FOUND, "Не найден параметр state"));
+            sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.NOT_FOUND, "The \"state\" parameter was not found."));
             return;
         }
 
-        String userUuid = params.get("uuid");
+        String code = params.get("code");
 
-        if (userUuid == null || userUuid.isEmpty()) {
-            sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.NOT_FOUND, "Не найден параметр uuid"));
+        if (code == null || code.isEmpty()) {
+            sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.NOT_FOUND, "The \"code\" parameter was not found."));
             return;
         }
 
-        UUID uuid = UUID.fromString(userUuid);
+        var accessTokenResponse = DiscordApi.getAccessTokenByCode(code);
 
-        AuthProviderPair pair = server.config.getAuthProviderPair("discordauthsystem");;
+        var response = DiscordApi.getDiscordUserByAccessToken(accessTokenResponse.access_token);
+
+        logger.info(response);
+
+        AuthProviderPair pair = server.config.getAuthProviderPair("discordauthsystem");
 
         if (pair == null) {
             throw new UnsupportedOperationException("Auth provider/handler not supported");
         }
 
-        User user = pair.core.getUserByUUID(uuid);
+        DiscordSystemAuthCoreProvider core = (DiscordSystemAuthCoreProvider) pair.core;
+
+        User user = core.getUserByDiscordId(response.user.id);
         if (user == null) {
-            sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.NOT_FOUND, "Пользователь с таким uuid не найден"));
+            sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.NOT_FOUND, "User with this uuid not found."));
             return;
         }
         if (user.isBanned()) {
-            sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.FORBIDDEN, "Вы были забанены!"));
+            sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.FORBIDDEN, "You have been banned!"));
             return;
         }
         String minecraftAccessToken;
@@ -87,12 +95,12 @@ public class WebApi implements NettyWebAPIHandler.SimpleSeverletHandler {
 
             client.coreObject = user;
             client.sessionObject = report.session();
-            server.authManager.internalAuth(client, AuthResponse.ConnectTypes.CLIENT, pair, user.getUsername(), uuid, ClientPermissions.DEFAULT, true);
+            server.authManager.internalAuth(client, AuthResponse.ConnectTypes.CLIENT, pair, user.getUsername(), user.getUUID(), ClientPermissions.DEFAULT, true);
             PlayerProfile playerProfile = server.authManager.getPlayerProfile(client);
             AuthRequestEvent request = new AuthRequestEvent(ClientPermissions.DEFAULT, playerProfile, minecraftAccessToken, null, null, oauth);
             request.requestUUID = RequestEvent.eventUUID;
             server.nettyServerSocketHandler.nettyServer.service.sendObject(ch, request);
         });
-        sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.OK, "Вы успешно авторизованы! Вернитесь, пожалуйста в лаунчер."));
+        sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.OK, "You are successfully authorized! Please return to the launcher."));
     }
 }

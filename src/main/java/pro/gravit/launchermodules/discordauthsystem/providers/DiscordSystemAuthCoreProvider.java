@@ -8,15 +8,12 @@ import pro.gravit.launchserver.auth.core.AuthCoreProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pro.gravit.launcher.request.auth.AuthRequest;
-import pro.gravit.launchermodules.discordauthsystem.Config;
 import pro.gravit.launchermodules.discordauthsystem.ModuleImpl;
 import pro.gravit.launchserver.LaunchServer;
 import pro.gravit.launchserver.auth.AuthException;
-import pro.gravit.launchserver.auth.core.MySQLCoreProvider;
 import pro.gravit.launchserver.auth.core.User;
 import pro.gravit.launchserver.auth.core.UserSession;
 import pro.gravit.launchserver.auth.core.interfaces.provider.AuthSupportExit;
-import pro.gravit.launchserver.auth.core.interfaces.provider.AuthSupportRegistration;
 import pro.gravit.launchserver.helper.HttpHelper;
 import pro.gravit.launchserver.manangers.AuthManager;
 import pro.gravit.launchserver.socket.Client;
@@ -32,14 +29,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 
 public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements AuthSupportExit {
     private final transient Logger logger = LogManager.getLogger();
-    private transient final HttpClient client = HttpClient.newBuilder().build();
-    private static ModuleImpl module;
+    private transient ModuleImpl module;
     public MySQLSourceConfig mySQLHolder;
 
     public String uuidColumn;
@@ -80,7 +74,6 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
                 userInfoCols, table, discordIdColumn);
 
         insertNewUserSQL = String.format("INSERT INTO %s (%s) VALUES (?, ?, ?, ?)", table, userInfoCols);
-
     }
 
     @Override
@@ -126,26 +119,15 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
         }
     }
 
-    public void createUser(Connection connection, String uuid, String username, String accessToken, String discordId) throws SQLException {
+    public DiscordUser createUser(Connection connection, String uuid, String username, String accessToken, String discordId) throws SQLException {
         PreparedStatement s = connection.prepareStatement(insertNewUserSQL);
         s.setString(1, uuid);
         s.setString(2, username);
         s.setString(3, accessToken);
         s.setString(4, discordId);
         s.executeUpdate();
+        return getUserByAccessToken(accessToken);
     }
-
-    private DiscordRefreshTokenResponse sendRefreshAccessToken(String refreshToken) throws IOException {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(String.format("%s/oauth2/token", module.config.discordApiEndpoint)))
-                .POST(HttpHelper.jsonBodyPublisher(new DiscordRefreshTokenRequest(refreshToken)))
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .build();
-        var e = HttpHelper.send(client, request, new HttpHelper.BasicJsonHttpErrorHandler<>(DiscordRefreshTokenResponse.class));
-        return e.getOrThrow();
-    }
-
-    //TODO: Дописать реквестер на отправку кода при авторизации (authorization_code)
 
     @Override
     public UserSession getUserSessionByOAuthAccessToken(String accessToken) throws OAuthAccessTokenExpired {
@@ -157,11 +139,11 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
     @Override
     public AuthManager.AuthReport refreshAccessToken(String refreshToken, AuthResponse.AuthContext context) {
         try {
-            var response = sendRefreshAccessToken(refreshToken);
+            var response = DiscordApi.sendRefreshToken(refreshToken);
             if(response == null) {
                 return null;
             }
-            return AuthManager.AuthReport.ofOAuth("", "", 0, null); //TODO: Добавить сюда правильный параметры
+            return AuthManager.AuthReport.ofOAuth(response.access_token, response.refresh_token, response.expires_in * 1000, null);
         } catch (IOException e) {
             logger.error("DiscordAuth refresh failed", e);
             return null;
@@ -358,26 +340,4 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
             return expireMillis;
         }
     }
-
-    public record DiscordRefreshTokenResponse() {} //TODO: Передать параметры
-
-    public static class DiscordOauthRequest {
-        public String client_id;
-        public String client_secret;
-        public String grant_type;
-        public DiscordOauthRequest () {
-            this.client_id = module.config.clientId;
-            this.client_secret = module.config.clientSecret;
-        }
-    }
-
-    public static class DiscordRefreshTokenRequest extends DiscordOauthRequest {
-        public String refresh_token;
-        public DiscordRefreshTokenRequest(String refresh_token) {
-            super();
-            this.grant_type = "refresh_token";
-            this.refresh_token = refresh_token;
-        }
-    }
-
 }
