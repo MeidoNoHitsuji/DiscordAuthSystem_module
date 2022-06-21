@@ -28,6 +28,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,14 +41,16 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
     public String uuidColumn;
     public String usernameColumn;
     public String accessTokenColumn;
+    public String refreshTokenColumn;
+    public String expiresInColumn;
     public String discordIdColumn;
+    public String bannedAtColumn;
     public String table;
 
     private transient String queryByUUIDSQL;
     private transient String queryByUsernameSQL;
     private transient String queryByAccessTokenSQL;
     private transient String queryByDiscordIdSQL;
-
     private transient String insertNewUserSQL;
 
     @Override
@@ -56,10 +60,13 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
         if (uuidColumn == null) logger.error("uuidColumn cannot be null");
         if (usernameColumn == null) logger.error("usernameColumn cannot be null");
         if (accessTokenColumn == null) logger.error("accessTokenColumn cannot be null");
+        if (refreshTokenColumn == null) logger.error("refreshTokenColumn cannot be null");
+        if (expiresInColumn == null) logger.error("expiresInColumn cannot be null");
         if (discordIdColumn == null) logger.error("discordIdColumn cannot be null");
+        if (bannedAtColumn == null) logger.error("bannedAtColumn cannot be null");
         if (table == null) logger.error("table cannot be null");
 
-        String userInfoCols = String.format("%s, %s, %s, %s", uuidColumn, usernameColumn, accessTokenColumn, discordIdColumn);
+        String userInfoCols = String.format("%s, %s, %s, %s, %s, %s, %s", uuidColumn, usernameColumn, accessTokenColumn, refreshTokenColumn, expiresInColumn, discordIdColumn, bannedAtColumn);
 
         queryByUsernameSQL = String.format("SELECT %s FROM %s WHERE %s=? LIMIT 1",
                 userInfoCols, table, usernameColumn);
@@ -73,17 +80,69 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
         queryByDiscordIdSQL = String.format("SELECT %s FROM %s WHERE %s=? LIMIT 1",
                 userInfoCols, table, discordIdColumn);
 
-        insertNewUserSQL = String.format("INSERT INTO %s (%s) VALUES (?, ?, ?, ?)", table, userInfoCols);
+        insertNewUserSQL = String.format("INSERT INTO %s (%s) VALUES (?, ?, ?, ?, ?, ?, ?)", table, userInfoCols);
     }
 
     @Override
     public User getUserByUsername(String username) {
+        return getDiscordUserByUsername(username);
+    }
+
+    public DiscordUser getDiscordUserByUsername(String username) {
         try {
             return query(queryByUsernameSQL, username);
         } catch (IOException e) {
             logger.error("SQL error", e);
             return null;
         }
+    }
+
+    public DiscordUser updateDataUser(String discordId, String accessToken, String refreshToken, Long expiresIn) {
+        try (Connection connection = mySQLHolder.getConnection()) {
+            return updateDataUser(connection, discordId, accessToken, refreshToken, expiresIn);
+        } catch (SQLException e) {
+            logger.error("updateDataUser SQL error", e);
+            return null;
+        }
+    }
+
+    private DiscordUser updateDataUser(Connection connection, String discordId, String accessToken, String refreshToken, Long expiresIn) throws SQLException {
+
+        ArrayList<String> setList = new ArrayList<String>();
+
+        if (accessToken != null) {
+            if (accessToken.length() == 0) {
+                setList.add(accessTokenColumn + " = " + null);
+            } else {
+                setList.add(accessTokenColumn + " = '" + accessToken + "'");
+            }
+        }
+
+        if (refreshToken != null) {
+            if (refreshToken.length() == 0) {
+                setList.add(refreshTokenColumn + " = " + null);
+            } else {
+                setList.add(refreshTokenColumn + " = '" + refreshToken + "'");
+            }
+        }
+
+        if (expiresIn != null) {
+            if (expiresIn == 0) {
+                setList.add(expiresInColumn + " = " + null);
+            } else {
+                setList.add(expiresInColumn + " = " + expiresIn);
+            }
+        }
+
+        String sqlSet = String.join(", ", setList);
+
+        if (sqlSet.length() != 0) {
+            String sql = String.format("UPDATE %s SET %s WHERE %s = %s", table, sqlSet, discordIdColumn, discordId);
+            PreparedStatement s = connection.prepareStatement(sql);
+            s.executeUpdate();
+        }
+
+        return getUserByDiscordId(discordId);
     }
 
     @Override
@@ -96,7 +155,7 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
         try {
             return query(queryByUUIDSQL, uuid.toString());
         } catch (IOException e) {
-            logger.error("SQL error", e);
+            logger.error("getUserByUUID SQL error", e);
             return null;
         }
     }
@@ -105,7 +164,7 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
         try {
             return query(queryByAccessTokenSQL, accessToken);
         } catch (IOException e) {
-            logger.error("SQL error", e);
+            logger.error("getUserByAccessToken SQL error", e);
             return null;
         }
     }
@@ -114,17 +173,29 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
         try {
             return query(queryByDiscordIdSQL, discordId);
         } catch (IOException e) {
-            logger.error("SQL error", e);
+            logger.error("getUserByDiscordId SQL error", e);
             return null;
         }
     }
 
-    public DiscordUser createUser(Connection connection, String uuid, String username, String accessToken, String discordId) throws SQLException {
+    public DiscordUser createUser(String uuid, String username, String accessToken, String refreshToken, Long expiresIn,  String discordId) {
+        try (Connection connection = mySQLHolder.getConnection()) {
+            return createUser(connection, uuid, username, accessToken, refreshToken, expiresIn, discordId);
+        } catch (SQLException e) {
+            logger.error("createUser SQL error", e);
+            return null;
+        }
+    }
+
+    private DiscordUser createUser(Connection connection, String uuid, String username, String accessToken, String refreshToken, Long expiresIn,  String discordId) throws SQLException {
         PreparedStatement s = connection.prepareStatement(insertNewUserSQL);
         s.setString(1, uuid);
         s.setString(2, username);
         s.setString(3, accessToken);
-        s.setString(4, discordId);
+        s.setString(4, refreshToken);
+        s.setLong(5, expiresIn);
+        s.setString(6, discordId);
+        s.setDate(7, null);
         s.executeUpdate();
         return getUserByAccessToken(accessToken);
     }
@@ -143,6 +214,10 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
             if(response == null) {
                 return null;
             }
+            DiscordUser user = getUserByAccessToken(response.access_token);
+            if (user != null) {
+                updateDataUser(user.discordId, response.access_token, response.refresh_token, response.expires_in * 1000);
+            }
             return AuthManager.AuthReport.ofOAuth(response.access_token, response.refresh_token, response.expires_in * 1000, null);
         } catch (IOException e) {
             logger.error("DiscordAuth refresh failed", e);
@@ -151,61 +226,33 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
     }
 
     @Override
-    public AuthManager.AuthReport authorize(String login, AuthResponse.AuthContext context, AuthRequest.AuthPasswordInterface password, boolean minecraftAccess) throws IOException {
+    public AuthManager.AuthReport authorize(String login, AuthResponse.AuthContext context, AuthRequest.AuthPasswordInterface password, boolean minecraftAccess) throws AuthException {
         if(login == null) {
             throw AuthException.userNotFound();
         }
 
-        logger.info(login);
-        logger.info(context);
-        logger.info(password);
-        logger.info(minecraftAccess);
+        DiscordUser user = getDiscordUserByUsername(login);
 
-        //TODO: Перенести код из createOAuthSession сюда
+        if (user == null) {
+            return null;
+        }
 
-        return null;
+        if (user.accessToken == null) {
+            return null;
+        }
+
+        DiscordUserSession session = new DiscordUserSession(user, user.accessToken);
+        return AuthManager.AuthReport.ofOAuth(user.accessToken, user.refreshToken, user.expiresIn * 1000, session);
     }
 
     @Override
     public User checkServer(Client client, String username, String serverID) throws IOException {
-        logger.info(client);
-        logger.info(username);
         User user = getUserByUsername(username);
-        logger.info(user);
-        if (user.getUsername().equals(username)) {
+        if (user.getUsername().equals(username) && user.getServerId().equals(serverID)) {
             return user;
         }
         return null;
     }
-
-//    @Override
-//    public PasswordVerifyReport verifyPassword(User user, AuthRequest.AuthPasswordInterface password) {
-//        if (!(password instanceof AuthPlainPassword)) {
-//            return PasswordVerifyReport.FAILED;
-//        }
-//        DiscordAuthSystemConfig config = module.jsonConfigurable.getConfig();
-//        AuthPlainPassword plainPassword = (AuthPlainPassword) password;
-//        if (DiscordAuthSystemModule.verifyPassword(user, plainPassword.password, config)) {
-//            return PasswordVerifyReport.OK;
-//        }
-//        return PasswordVerifyReport.FAILED;
-//    }
-
-//    @Override
-//    public AuthManager.AuthReport createOAuthSession(User user, AuthResponse.AuthContext context, PasswordVerifyReport report, boolean minecraftAccess) throws IOException {
-//        DiscordAuthSystemConfig config = module.jsonConfigurable.getConfig();
-//        DiscordAuthSystemModule.DiscordUserSession entity = new DiscordAuthSystemModule.DiscordUserSession((DiscordAuthSystemModule.DiscordUser) user);
-//        module.addNewSession(entity);
-//        if (config.oauthTokenExpire != 0) {
-//            entity.update(config.oauthTokenExpire);
-//        }
-//        if (minecraftAccess) {
-//            String minecraftAccessToken = SecurityHelper.randomStringToken();
-//            ((DiscordAuthSystemModule.DiscordUser) user).accessToken = minecraftAccessToken;
-//            return AuthManager.AuthReport.ofOAuthWithMinecraft(minecraftAccessToken, entity.accessToken, entity.refreshToken, config.oauthTokenExpire);
-//        }
-//        return AuthManager.AuthReport.ofOAuth(entity.accessToken, entity.refreshToken, config.oauthTokenExpire);
-//    }
 
     @Override
     protected boolean updateServerID(User user, String serverID) throws IOException {
@@ -222,14 +269,16 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public boolean deleteSession(UserSession session) {
-        return true; //TODO: Обнулять accessToken
-//        return module.deleteSession((DiscordUserSession) session);
+        return exitUser(session.getUser());
     }
 
     @Override
     public boolean exitUser(User user) {
-        return true; //TODO: Обнулять accessToken
-//        return module.exitUser((DiscordUser) user);
+        DiscordUser discordUser = getUserByAccessToken(user.getAccessToken());
+        if (discordUser == null) {
+            return true;
+        }
+        return updateDataUser(discordUser.discordId, "", null, null) != null;
     }
 
     private DiscordUser query(String sql, String value) throws IOException {
@@ -251,7 +300,10 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
                         set.getString(usernameColumn),
                         UUID.fromString(set.getString(uuidColumn)),
                         set.getString(accessTokenColumn),
-                        set.getString(discordIdColumn)
+                        set.getString(refreshTokenColumn),
+                        set.getLong(expiresInColumn),
+                        set.getString(discordIdColumn),
+                        set.getDate(bannedAtColumn)
                 )
                 : null;
     }
@@ -273,12 +325,18 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
         public ClientPermissions permissions;
         public String serverId;
         public String accessToken;
+        public String refreshToken;
+        public Long expiresIn;
+        public Date bannedAt;
 
-        public DiscordUser(String username, UUID uuid, String accessToken, String discordId) {
+        public DiscordUser(String username, UUID uuid, String accessToken, String refreshToken, Long expiresIn, String discordId, Date bannedAt) {
             this.username = username;
             this.uuid = uuid;
             this.discordId = discordId;
             this.accessToken = accessToken;
+            this.expiresIn = expiresIn;
+            this.bannedAt = bannedAt;
+            this.refreshToken = refreshToken;
             this.permissions = new ClientPermissions();
         }
 
@@ -302,6 +360,14 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
             return accessToken;
         }
 
+        public String getRefreshToken() {
+            return refreshToken;
+        }
+
+        public Long getExpiresIn() {
+            return expiresIn;
+        }
+
         @Override
         public ClientPermissions getPermissions() {
             return permissions;
@@ -309,7 +375,7 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
         @Override
         public boolean isBanned() {
-            return false;
+            return this.bannedAt != null;
         }
     }
 
