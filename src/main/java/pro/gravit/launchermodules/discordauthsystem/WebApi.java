@@ -71,8 +71,6 @@ public class WebApi implements NettyWebAPIHandler.SimpleSeverletHandler {
 
         var response = DiscordApi.getDiscordUserByAccessToken(accessTokenResponse.access_token);
 
-        logger.info(server.config.auth);
-
         AuthProviderPair pair = server.config.getAuthProviderPair();
         DiscordSystemAuthCoreProvider core = (DiscordSystemAuthCoreProvider) pair.core;
 
