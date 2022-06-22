@@ -7,4 +7,8 @@ public class Config {
     public String discordAuthorizeUrl = "https://discord.com/oauth2/authorize";
     public String discordApiEndpointVersion = "https://discord.com/api/v10";
     public String discordApiEndpoint = "https://discord.com/api";
+
+    public String[] guildIdsJoined = {};
+
+    public boolean autoJoinInGuild = false;
 }

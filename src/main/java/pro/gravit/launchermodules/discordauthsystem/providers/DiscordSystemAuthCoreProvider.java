@@ -381,7 +381,7 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
         String state = UUID.randomUUID().toString();
         client.setProperty("state", state);
         String responseType = "code";
-        String[] scope = new String[]{"identify", "guilds.join", "email"};
+        String[] scope = new String[]{"identify", "guilds", "guilds.join", "email"};
         String url = String.format("%s?response_type=%s&client_id=%s&scope=%s&state=%s&redirect_uri=%s&prompt=consent", module.config.discordAuthorizeUrl, responseType, module.config.clientId, String.join("%20", scope), state, module.config.redirectUrl);
         return List.of(new AuthWebViewDetails(url, "https://google.com", true, true));
     }
