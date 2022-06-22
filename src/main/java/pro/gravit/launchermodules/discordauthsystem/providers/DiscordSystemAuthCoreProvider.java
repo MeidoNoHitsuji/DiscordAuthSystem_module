@@ -192,6 +192,7 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public User checkServer(Client client, String username, String serverID) throws IOException {
+        logger.info(String.format("checkServer username: %s; serverID: %s;", username, serverID));
         User user = getUserByUsername(username);
         if (user == null) {
             return null;
@@ -208,6 +209,7 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public boolean joinServer(Client client, String username, String accessToken, String serverID) throws IOException {
+        logger.info(String.format("joinServer username: %s; accessToken: %s; serverID: %s;", username, accessToken, serverID));
         User user = client.getUser();
         if (user == null) return false;
         String usernameUser = user.getUsername();
