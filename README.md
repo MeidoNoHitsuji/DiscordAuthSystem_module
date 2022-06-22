@@ -48,7 +48,10 @@
       "expiresInColumn": "expiresIn",
       "discordIdColumn": "discordId",
       "bannedAtColumn": "bannedAt",
-      "table": "users"
+      "hardwareIdColumn": "hwidId",
+      "serverIDColumn": "serverID",
+      "table": "users",
+      "tableHwid": "hwids"
     },
     "textureProvider": {
       "skinURL": "http://example.com/skins/%username%.png",
@@ -62,10 +65,12 @@
 
 - В mySQLHolder указывается коннект к mysql (данные аккаунтов хрантся там)
 - \*\*\*\*Column - строки наименования колонок.
+- tableHwid - таблица hwid юзеров.
 
 #### Дефолтный запрос на создание таблицы
 
 ```mysql
+-- Создаём таблицу пользователей
 CREATE TABLE `users` (
     `uuid` CHAR(36) UNIQUE,
     `username` CHAR(32) UNIQUE,
@@ -74,7 +79,37 @@ CREATE TABLE `users` (
     `expiresIn` BIGINT DEFAULT NULL,
     `discordId` VARCHAR(32) DEFAULT NULL,
     `bannedAt` DATETIME DEFAULT NULL,
+    `serverID` VARCHAR(41) DEFAULT NULL,
+    `hwidId` BIGINT DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Создаём таблицу hwids данных
+CREATE TABLE `hwids` (
+     `id` bigint(20) NOT NULL,
+     `publickey` blob,
+     `hwDiskId` varchar(255) DEFAULT NULL,
+     `baseboardSerialNumber` varchar(255) DEFAULT NULL,
+     `graphicCard` varchar(255) DEFAULT NULL,
+     `displayId` blob,
+     `bitness` int(11) DEFAULT NULL,
+     `totalMemory` bigint(20) DEFAULT NULL,
+     `logicalProcessors` int(11) DEFAULT NULL,
+     `physicalProcessors` int(11) DEFAULT NULL,
+     `processorMaxFreq` bigint(11) DEFAULT NULL,
+     `battery` tinyint(1) NOT NULL DEFAULT "0",
+     `banned` tinyint(1) NOT NULL DEFAULT "0"
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- Добавляем модификаторы hwids таблицы
+ALTER TABLE `hwids`
+    ADD PRIMARY KEY (`id`),
+    ADD UNIQUE KEY `publickey` (`publickey`(255));
+ALTER TABLE `hwids`
+    MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
+
+-- Связываем пользователей и hwids
+ALTER TABLE `users`
+    ADD CONSTRAINT `users_hwidfk` FOREIGN KEY (`hwidId`) REFERENCES `hwids` (`id`);
 ```
 
 ## [Опционально] Обновить Runtime
@@ -151,8 +186,10 @@ public <T extends WebSocketEvent> boolean eventHandle(T event) {
         if (event instanceof AdditionalDataRequestEvent) {
             AdditionalDataRequestEvent dataRequest = (AdditionalDataRequestEvent) event;
             Map<String, String> data = dataRequest.data;
-        
-            if (data.get("type").equals("ChangeRuntimeSettings")) {
+
+            String type = data.get("type");
+
+            if (type != null && type.equals("ChangeRuntimeSettings")) {
                 application.runtimeSettings.login = data.get("login");
                 application.runtimeSettings.oauthAccessToken = data.get("oauthAccessToken");
                 application.runtimeSettings.oauthRefreshToken = data.get("oauthRefreshToken");

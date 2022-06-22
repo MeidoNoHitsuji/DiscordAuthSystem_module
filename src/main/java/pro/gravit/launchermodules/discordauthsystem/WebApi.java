@@ -14,7 +14,6 @@ import pro.gravit.launchermodules.discordauthsystem.providers.DiscordApi;
 import pro.gravit.launchermodules.discordauthsystem.providers.DiscordSystemAuthCoreProvider;
 import pro.gravit.launchserver.LaunchServer;
 import pro.gravit.launchserver.auth.AuthProviderPair;
-import pro.gravit.launchserver.auth.core.User;
 import pro.gravit.launchserver.manangers.AuthManager;
 import pro.gravit.launchserver.socket.Client;
 import pro.gravit.launchserver.socket.NettyConnectContext;
@@ -23,19 +22,16 @@ import pro.gravit.launchserver.socket.response.auth.AuthResponse;
 
 import java.text.Normalizer;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
 import java.util.regex.Pattern;
 
 public class WebApi implements NettyWebAPIHandler.SimpleSeverletHandler {
 
+    private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
+    private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
     private final ModuleImpl module;
     private final LaunchServer server;
     private transient final Logger logger = LogManager.getLogger();
-
-    private static final Pattern NONLATIN = Pattern.compile("[^\\w-]");
-    private static final Pattern WHITESPACE = Pattern.compile("[\\s]");
 
     public WebApi(ModuleImpl module, LaunchServer server) {
         this.module = module;
