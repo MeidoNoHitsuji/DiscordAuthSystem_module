@@ -192,15 +192,12 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public User checkServer(Client client, String username, String serverID) throws IOException {
-        logger.info(String.format("checkServer username: %s; serverID: %s;", username, serverID));
         User user = getUserByUsername(username);
         if (user == null) {
             return null;
         }
         String usernameUser = user.getUsername();
-        logger.info("checkServer username: " + usernameUser);
         String serverId = user.getServerId();
-        logger.info("checkServer serverId: " + serverId);
         if (usernameUser != null && usernameUser.equals(username) && serverId != null && serverId.equals(serverID)) {
             return user;
         }
@@ -209,13 +206,10 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
 
     @Override
     public boolean joinServer(Client client, String username, String accessToken, String serverID) throws IOException {
-        logger.info(String.format("joinServer username: %s; accessToken: %s; serverID: %s;", username, accessToken, serverID));
         User user = client.getUser();
         if (user == null) return false;
         String usernameUser = user.getUsername();
-        logger.info("joinServer username: " + usernameUser);
         String userAccessToken = user.getAccessToken();
-        logger.info("joinServer userAccessToken: " + userAccessToken);
         return usernameUser != null && usernameUser.equals(username) && userAccessToken != null && userAccessToken.equals(accessToken) && updateServerID(user, serverID);
     }
 
@@ -381,9 +375,9 @@ public class DiscordSystemAuthCoreProvider extends AuthCoreProvider implements A
         String state = UUID.randomUUID().toString();
         client.setProperty("state", state);
         String responseType = "code";
-        String[] scope = new String[]{"identify", "guilds", "guilds.join", "email"};
+        String[] scope = new String[]{"identify", "guilds", "guilds.members.read", "email"};
         String url = String.format("%s?response_type=%s&client_id=%s&scope=%s&state=%s&redirect_uri=%s&prompt=consent", module.config.discordAuthorizeUrl, responseType, module.config.clientId, String.join("%20", scope), state, module.config.redirectUrl);
-        return List.of(new AuthWebViewDetails(url, "https://google.com", true, true));
+        return List.of(new AuthWebViewDetails(url, "", true, true));
     }
 
     private DiscordUserHardware fetchHardwareInfo(ResultSet set) throws SQLException, IOException {

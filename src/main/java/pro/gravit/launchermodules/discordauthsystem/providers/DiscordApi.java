@@ -67,7 +67,7 @@ public class DiscordApi {
     }
 
     public static List<UserGuildResponse> getUserGuilds(String accessToken) throws IOException {
-        org.jsoup.Connection request = Jsoup.connect(config.discordApiEndpoint + "/oauth2/@me")
+        org.jsoup.Connection request = Jsoup.connect(config.discordApiEndpoint + "/users/@me/guilds")
                 .header("Authorization", "Bearer " + accessToken)
                 .ignoreContentType(true);
 
@@ -77,11 +77,33 @@ public class DiscordApi {
         );
     }
 
+    public static MemberGuildResponse getUserGuildMember(String accessToken, String guildId) throws IOException {
+        org.jsoup.Connection request = Jsoup.connect(config.discordApiEndpoint + "/users/@me/guilds/" + guildId + "/member")
+                .header("Authorization", "Bearer " + accessToken)
+                .ignoreContentType(true);
+
+        return Launcher.gsonManager.gson.fromJson(
+                request.get().body().text(),
+                MemberGuildResponse.class
+        );
+    }
+
     public static class UserGuildResponse {
         public String id;
 
-        public UserGuildResponse (String id) {
+        public String name;
+
+        public UserGuildResponse (String id, String name) {
             this.id = id;
+            this.name = name;
+        }
+    }
+
+    public static class MemberGuildResponse {
+        public String nick;
+
+        public MemberGuildResponse (String nick) {
+            this.nick = nick;
         }
     }
 

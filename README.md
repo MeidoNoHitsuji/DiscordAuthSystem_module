@@ -21,7 +21,20 @@
   "redirectUrl": "это редирект, который вы указали",
   "discordAuthorizeUrl": "https://discord.com/oauth2/authorize",
   "discordApiEndpointVersion": "https://discord.com/api/v10",
-  "discordApiEndpoint": "https://discord.com/api"
+  "discordApiEndpoint": "https://discord.com/api",
+  "guildIdsJoined": [
+    {
+      "id": "id гильдии №1",
+      "name": "наименование гильдии",
+      "url": "ссылка для входа"
+    },
+    {
+      "id": "id гильдии №2",
+      "name": "наименование гильдии",
+      "url": "ссылка для входа"
+    },
+  ],
+  "guildIdGetNick": "id гильдии с которой будет браться ник. если не надо, то осталить пустым"
 }
 ```
 

@@ -1,5 +1,8 @@
 package pro.gravit.launchermodules.discordauthsystem;
 
+import javax.xml.crypto.dsig.keyinfo.KeyValue;
+import java.util.*;
+
 public class Config {
     public String clientId = "clientId";
     public String clientSecret = "clientSecret";
@@ -8,7 +11,22 @@ public class Config {
     public String discordApiEndpointVersion = "https://discord.com/api/v10";
     public String discordApiEndpoint = "https://discord.com/api";
 
-    public String[] guildIdsJoined = {};
+    public List<DiscordGuild> guildIdsJoined = new ArrayList<>();
 
-    public boolean autoJoinInGuild = false;
+    public String guildIdGetNick = "";
+
+    public int usernameLimit = 32;
+
+    public static class DiscordGuild {
+        public String id;
+        public String name;
+        public String url;
+
+        public DiscordGuild(String id, String name, String url) {
+            this.id = id;
+            this.name = name;
+            this.url = url;
+        }
+    }
 }
+
