@@ -204,19 +204,6 @@ public class WebApi implements NettyWebAPIHandler.SimpleSeverletHandler {
             request.requestUUID = RequestEvent.eventUUID;
 
             server.nettyServerSocketHandler.nettyServer.service.sendObject(ch, request);
-
-            Map<String, String> data = new HashMap<String, String>();
-
-            data.put("type", "ChangeRuntimeSettings");
-            data.put("login", finalUser.getUsername());
-            data.put("oauthAccessToken", finalUser.getAccessToken());
-            data.put("oauthRefreshToken", finalUser.getRefreshToken());
-            data.put("oauthExpire", finalUser.getExpiresIn().toString());
-
-            AdditionalDataRequestEvent dataRequestEvent = new AdditionalDataRequestEvent(data);
-            dataRequestEvent.requestUUID = RequestEvent.eventUUID;
-
-            server.nettyServerSocketHandler.nettyServer.service.sendObject(ch, dataRequestEvent);
         });
         sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.OK, "You are successfully authorized! Please return to the launcher."));
     }
