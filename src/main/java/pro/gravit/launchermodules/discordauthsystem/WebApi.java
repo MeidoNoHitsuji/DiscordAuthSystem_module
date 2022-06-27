@@ -152,8 +152,11 @@ public class WebApi implements NettyWebAPIHandler.SimpleSeverletHandler {
                 return;
             }
 
-            if (usernameLength > module.config.usernameLimit) {
-                username = username.substring(0, usernameLength-1);
+            if (module.config.usernameRegex.length() > 0) {
+                if (!username.matches(module.config.usernameRegex)) {
+                    sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.NOT_ACCEPTABLE, "Your nickname does not meet the requirements. Please change it."));
+                    return;
+                }
             }
 
             if (core.getUserByUsername(username) != null) {
