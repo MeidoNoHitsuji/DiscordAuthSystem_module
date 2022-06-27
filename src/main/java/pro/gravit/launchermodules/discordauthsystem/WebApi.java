@@ -1,5 +1,6 @@
 package pro.gravit.launchermodules.discordauthsystem;
 
+import com.github.slugify.Slugify;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -38,6 +39,7 @@ public class WebApi implements NettyWebAPIHandler.SimpleSeverletHandler {
     private final ModuleImpl module;
     private final LaunchServer server;
     private transient final Logger logger = LogManager.getLogger();
+    private final Slugify slg = Slugify.builder().underscoreSeparator(true).lowerCase(false).transliterator(true).build();
 
     public WebApi(ModuleImpl module, LaunchServer server) {
         this.module = module;
@@ -127,19 +129,21 @@ public class WebApi implements NettyWebAPIHandler.SimpleSeverletHandler {
         DiscordSystemAuthCoreProvider.DiscordUser user = core.getUserByDiscordId(response.user.id);
 
         if (user == null) {
-            String username;
+            String username = response.user.username;
             if (module.config.guildIdGetNick.length() > 0) {
                 try {
                     var member = DiscordApi.getUserGuildMember(accessTokenResponse.access_token, module.config.guildIdGetNick);
-                    username = member.nick;
+                    if (member.nick != null) {
+                        username = member.nick;
+                    }
                 } catch (Exception e) {
                     logger.error("DiscordApi.getUserGuildMember: " + e);
                     sendHttpResponse(ctx, simpleResponse(HttpResponseStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred!"));
                     return;
                 }
-            } else {
-                username = toSlug(response.user.username);
             }
+
+            username = slg.slugify(username);
 
             var usernameLength = username.length();
 
